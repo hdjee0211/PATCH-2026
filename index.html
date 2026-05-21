@@ -1,119 +1,162 @@
-import os
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚡ 초간지 반응속도 테스트</title>
+    <style>
+        /* 깃허브 다크모드 감성의 깔끔한 UI 스타일링 */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background-color: #0d1117;
+            color: #c9d1d9;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            user-select: none;
+        }
 
-# 체스 말 유니코드 및 색상 정의
-WHITE_PIECES = {"P": "♙", "R": "♖", "N": "♘", "B": "♗", "Q": "♕", "K": "♔"}
-BLACK_PIECES = {"p": "♟", "r": "♜", "n": "♞", "b": "♝", "q": "♛", "k": "♚"}
+        h1 {
+            margin-bottom: 20px;
+            font-size: 24px;
+            color: #f0f6fc;
+        }
 
-class ChessGame:
-    def __init__(self):
-        # 초기 체스판 설정 (대문자: 백색, 소문자: 흑색, '.': 빈칸)
-        self.board = [
-            ["r", "n", "b", "q", "k", "b", "n", "r"],
-            ["p", "p", "p", "p", "p", "p", "p", "p"],
-            [".", ".", ".", ".", ".", ".", ".", "."],
-            [".", ".", ".", ".", ".", ".", ".", "."],
-            [".", ".", ".", ".", ".", ".", ".", "."],
-            [".", ".", ".", ".", ".", ".", ".", "."],
-            ["P", "P", "P", "P", "P", "P", "P", "P"],
-            ["R", "N", "B", "Q", "K", "B", "N", "R"]
-        ]
-        self.turn = "WHITE"
+        /* 게임 스크린 (클릭 영역) */
+        #game-screen {
+            width: 80%;
+            max-width: 600px;
+            height: 400px;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            cursor: pointer;
+            transition: background-color 0.1s ease;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        }
 
-    def clear_screen(self):
-        os.system('cls' if os.name == 'nt' else 'clear')
+        /* 게임 상태별 배경색 (대기: 빨강 / 시작: 초록 / 준비: 파랑) */
+        .ready { background-color: #1f6feb; } /* 파란색 (클릭해서 시작) */
+        .waiting { background-color: #da3633; } /* 빨간색 (대기) */
+        .go { background-color: #238636; } /* 초록색 (지금 클릭!) */
 
-    def display_board(self):
-        self.clear_screen()
-        print("\n      🔥 터미널 초간지 체스 게임 🔥\n")
-        print("     a   b   c   d   e   f   g   h")
-        print("   +---+---+---+---+---+---+---+---+")
-        
-        for i in range(8):
-            row_str = f" {8 - i} |"
-            for j in range(8):
-                piece = self.board[i][j]
-                # 말 모양 변환
-                if piece in WHITE_PIECES:
-                    display_piece = WHITE_PIECES[piece]
-                elif piece in BLACK_PIECES:
-                    display_piece = BLACK_PIECES[piece]
-                else:
-                    display_piece = " "
+        .status-text {
+            font-size: 28px;
+            font-weight: bold;
+            color: #ffffff;
+            text-shadow: 1px 1px 5px rgba(0,0,0,0.3);
+        }
+
+        .sub-text {
+            font-size: 16px;
+            color: #e6edf3;
+            margin-top: 15px;
+        }
+
+        /* 결과 창 스타일 */
+        #result-panel {
+            margin-top: 25px;
+            font-size: 18px;
+            text-align: center;
+            display: none;
+        }
+
+        .rank {
+            font-weight: bold;
+            font-size: 22px;
+            color: #58a6ff;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>⚡ REACTION TIME TEST ⚡</h1>
+    
+    <div id="game-screen" class="ready" onclick="handleScreenClick()">
+        <div id="status" class="status-text">화면을 클릭하면 시작합니다!</div>
+        <div id="sub" class="sub-text">초록색이 되면 누구보다 빠르게 클릭하세요.</div>
+    </div>
+
+    <div id="result-panel">
+        <div>최근 반응속도: <span id="time-taken" style="font-weight:bold; color:#39d353;">0</span> ms</div>
+        <div id="rank-text" class="rank"></div>
+    </div>
+
+    <script>
+        // 자바스크립트 게임 로직
+        let currentState = "ready"; // 상태 관리: ready, waiting, go
+        let startTime = 0;
+        let timeoutId = null;
+
+        const screen = document.getElementById("game-screen");
+        const statusText = document.getElementById("status");
+        const subText = document.getElementById("sub");
+        const resultPanel = document.getElementById("result-panel");
+        const timeTakenSpan = document.getElementById("time-taken");
+        const rankTextDiv = document.getElementById("rank-text");
+
+        // 반응속도별 티어 측정 함수
+        function getRank(ms) {
+            if (ms < 150) return "👑 신의 경지 (Human Calculator)";
+            if (ms < 220) return "⚡ 프로게이머급 (Super Reflexes)";
+            if (ms < 300) return "🟢 평균 이상 (Good Job)";
+            if (ms < 400) return "🟡 일반인 평균 (Average)";
+            return "🐢 달팽이 등급 (Slow Motion)";
+        }
+
+        // 화면 클릭 시 발생하는 메인 로직
+        function handleScreenClick() {
+            if (currentState === "ready") {
+                // 1. 대기 상태로 전환 (빨간 화면)
+                currentState = "waiting";
+                screen.className = "waiting";
+                statusText.innerText = "🔴 Ready... 준비하세요...";
+                subText.innerText = "초록색으로 변할 때까지 대기하세요! (예측 클릭 금지)";
+                resultPanel.style.display = "none";
+
+                // 랜덤 대기 시간 설정 (2초 ~ 5초 사이)
+                const randomDelay = Math.floor(Math.random() * 3000) + 2000;
                 
-                # 체스판 배경색 번갈아가며 적용 (터미널 ANSI 색상)
-                if (i + j) % 2 == 0:
-                    # 밝은 배경
-                    row_str += f"\033[48;5;247m\033[30m {display_piece} \033[0m|"
-                else:
-                    # 어두운 배경 (깃허브 다크모드 느낌)
-                    row_str += f"\033[48;5;235m\033[97m {display_piece} \033[0m|"
-                    
-            print(row_str, 8 - i)
-            print("   +---+---+---+---+---+---+---+---+")
-        print("     a   b   c   d   e   f   g   h\n")
-        print(f" 현재 턴: \033[1m{self.turn}\033[0m")
+                timeoutId = setTimeout(() => {
+                    // 2. GO 상태로 전환 (초록 화면)
+                    currentState = "go";
+                    screen.className = "go";
+                    statusText.innerText = "🟢 !!! GO !!! 지금 클릭하세요!!!";
+                    subText.innerText = "빨리!!!";
+                    startTime = Date.now(); // 현재 시간 기록
+                }, randomDelay);
 
-    def parse_position(self, pos_str):
-        # 'e2' 같은 입력을 배열 인덱스 (row, col)로 변환
-        try:
-            col = ord(pos_str[0].lower()) - ord('a')
-            row = 8 - int(pos_str[1])
-            if 0 <= row < 8 and 0 <= col < 8:
-                return row, col
-        except:
-            return None
-        return None
+            } else if (currentState === "waiting") {
+                // 3. 부정출발 예외 처리 (빨간색일 때 눌렀을 때)
+                clearTimeout(timeoutId); // 예약된 초록 화면 타이머 취소
+                currentState = "ready";
+                screen.className = "ready";
+                statusText.innerText = "⚠️ 부정출발!!";
+                subText.innerText = "너무 급했습니다. 다시 클릭하면 시작합니다.";
 
-    def move_piece(self, start_str, end_str):
-        start = self.parse_position(start_str)
-        end = self.parse_position(end_str)
-        
-        if not start or not end:
-            return False, "올바른 좌표를 입력해주세요. (예: e2 e4)"
-            
-        s_row, s_col = start
-        e_row, e_col = end
-        piece = self.board[s_row][s_col]
-        
-        if piece == ".":
-            return False, "선택한 칸에 말이 없습니다."
-            
-        # 턴 체크
-        if self.turn == "WHITE" and piece.islower():
-            return False, "지금은 백색(WHITE)의 턴입니다."
-        if self.turn == "BLACK" and piece.isupper():
-            return False, "지금은 흑색(BLACK)의 턴입니다."
-            
-        # 이동 수행 (기본 규칙 예외 처리는 생략된 프로토타입 버전입니다)
-        target = self.board[e_row][e_col]
-        self.board[e_row][e_col] = piece
-        self.board[s_row][s_col] = "."
-        
-        # 턴 전환
-        self.turn = "BLACK" if self.turn == "WHITE" else "WHITE"
-        return True, "이동 완료!"
+            } else if (currentState === "go") {
+                // 4. 성공적인 클릭 (시간 계산 및 결과 도출)
+                const endTime = Date.now();
+                const reactionTime = endTime - startTime; // 밀리초(ms) 계산
 
-    def run(self):
-        while True:
-            self.display_board()
-            try:
-                command = input("👉 이동할 말과 목표 칸을 입력하세요 (종료: q) \n(ex: e2 e4) -> ").strip()
-                if command.lower() == 'q':
-                    print("게임이 종료되었습니다.")
-                    break
-                
-                parts = command.split()
-                if len(parts) != 2:
-                    input("⚠️ 형식에 맞지 않습니다. [엔터]를 누르고 다시 입력하세요.")
-                    continue
-                    
-                success, msg = self.move_piece(parts[0], parts[1])
-                if not success:
-                    input(f"⚠️ 오류: {msg} [엔터]를 누르고 다시 입력하세요.")
-            except KeyboardInterrupt:
-                print("\n게임을 종료합니다.")
-                break
+                currentState = "ready";
+                screen.className = "ready";
+                statusText.innerText = "🎉 성공! 다시 하려면 클릭하세요.";
+                subText.innerText = "아래에서 당신의 티어를 확인해보세요.";
 
-if __name__ == "__main__":
-    game = ChessGame()
-    game.run()
+                // 결과 표시
+                timeTakenSpan.innerText = reactionTime;
+                rankTextDiv.innerText = getRank(reactionTime);
+                resultPanel.style.display = "block";
+            }
+        }
+    </script>
+</body>
+</html>
